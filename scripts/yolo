@@ -1,4 +1,2 @@
-#!/usr/bin/env bash
-# yolo — Remote terminal shortcut
-# TODO: Copy actual script from Monsta-Mash
-echo "yolo: not yet configured. Copy from monsta-mash."
+#!/bin/bash
+claude --dangerously-skip-permissions "$@"
