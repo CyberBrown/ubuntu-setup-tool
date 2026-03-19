@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# get-started — Remote terminal shortcut
+# TODO: Copy actual script from Monsta-Mash
+echo "get-started: not yet configured. Copy from monsta-mash."

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# rterm — Remote terminal shortcut
+# TODO: Copy actual script from Monsta-Mash
+echo "rterm: not yet configured. Copy from monsta-mash."

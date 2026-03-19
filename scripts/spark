@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# spark — Remote terminal shortcut
+# TODO: Copy actual script from Monsta-Mash
+echo "spark: not yet configured. Copy from monsta-mash."
