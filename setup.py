@@ -926,7 +926,7 @@ def module_apps(state: dict):
         ("gimp", "GIMP", True),
         ("blender", "Blender", True),
         ("resolve", "DaVinci Resolve", False),
-        ("audacity", "Audacity (Stem/audio)", True),
+        ("steam", "Steam", True),
         ("vlc", "VLC", True),
         ("winamp", "Winamp (Qmmp)", True),
         ("clock", "GNOME Clock", True),
@@ -951,7 +951,10 @@ def module_apps(state: dict):
         "resolve": ("resolve_install", "DaVinci Resolve", lambda: console.print(
             "[yellow]  DaVinci Resolve requires manual download from: https://www.blackmagicdesign.com/products/davinciresolve[/yellow]"
         )),
-        "audacity": ("audacity_install", "Install Audacity", lambda: flatpak_install("org.audacityteam.Audacity")),
+        "steam": ("steam_install", "Install Steam", lambda: run(
+            "sudo dpkg --add-architecture i386 && sudo apt update && "
+            "sudo apt install -y steam-installer"
+        )),
         "vlc": ("vlc_install", "Install VLC", lambda: apt_install("vlc")),
         "winamp": ("winamp_install", "Install Qmmp (Winamp-style player)", lambda: apt_install("qmmp")),
         "clock": ("clock_install", "Install GNOME Clock", lambda: apt_install("gnome-clocks")),
