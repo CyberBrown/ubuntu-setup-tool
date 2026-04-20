@@ -2,7 +2,9 @@
 
 Post-installation configurator for Ubuntu 24.04 LTS. Provides a terminal UI for installing apps, configuring accounts, and setting up a development environment on fresh Ubuntu installs.
 
-## Quick Start
+## USB install
+
+Use this flow when installing on bare metal from scratch.
 
 ### Phase 1: Prepare USB Boot Drive
 
@@ -28,6 +30,88 @@ bash get-started.sh
 # Or one-liner from GitHub:
 curl -fsSL https://raw.githubusercontent.com/CyberBrown/ubuntu-setup-tool/main/get-started.sh | bash
 ```
+
+## Network install (Proxmox)
+
+Use this flow when installing into a VM on a Proxmox host. The VM comes up with the setup tool already cloned, Tailscale joined, and xrdp listening — on first login you can jump straight to `python3 setup.py`.
+
+### Prerequisites
+
+- A Proxmox VE 8.x node with an ISO storage (e.g. `local:iso`) and a network bridge the VM should land on (this repo uses `vmbr1` NAT + Tailscale; adjust to taste).
+- A Tailscale auth key (reusable + preauth). Create one at https://login.tailscale.com/admin/settings/keys.
+- An SSH public key you want to pre-authorize on the VM.
+
+### 1. Copy the helpers to the Proxmox host
+
+From your workstation:
+
+```bash
+rsync -av scripts/proxmox/ root@<proxmox-host>:/root/proxmox-scripts/
+```
+
+### 2. Download the Ubuntu Server ISO on the Proxmox host
+
+```bash
+ssh root@<proxmox-host>
+cd /var/lib/vz/template/iso
+wget https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso -O ubuntu-24.04-live-server.iso
+```
+
+(Why Ubuntu Server and not Kubuntu? Kubuntu's live ISO uses Calamares, which isn't scriptable. We install `kubuntu-desktop` via cloud-init first-boot so you still get KDE Plasma on first login.)
+
+### 3. Build the cloud-init seed ISO
+
+Still on the Proxmox host:
+
+```bash
+HOSTNAME=kubuntu-ws \
+USERNAME=chris \
+SSH_KEY="ssh-ed25519 AAAAC3... you@host" \
+TAILSCALE_KEY=tskey-auth-... \
+PASSWORD_HASH="$(openssl passwd -6 'some-strong-password')" \
+IP_CIDR=10.10.10.200/24 \
+GATEWAY=10.10.10.1 \
+OUTPUT=/var/lib/vz/template/iso/kubuntu-ws-seed.iso \
+bash /root/proxmox-scripts/make-seed.sh
+```
+
+### 4. Create and start the VM
+
+```bash
+VMID=200 NAME=kubuntu-ws BRIDGE=vmbr1 \
+IP=10.10.10.200/24 GATEWAY=10.10.10.1 \
+ISO=local:iso/ubuntu-24.04-live-server.iso \
+SEED=local:iso/kubuntu-ws-seed.iso \
+bash /root/proxmox-scripts/create-vm.sh
+```
+
+Open the VM's console in the Proxmox web UI. Subiquity asks **"Continue with autoinstall? (yes\|no)"** once — type `yes` + Enter (the installer requires this confirmation since `autoinstall` isn't on the kernel cmdline of the stock ISO). After that, the VM installs unattended and powers itself off.
+
+### 5. After the install completes
+
+Detach the ISOs and boot from disk:
+
+```bash
+qm set 200 --ide2 none,media=cdrom --ide3 none,media=cdrom
+qm set 200 --boot order=scsi0
+qm start 200
+```
+
+On first boot, `/root/first-boot.sh` (installed via cloud-init) runs Tailscale, xrdp, `kubuntu-desktop`, and clones `ubuntu-setup-tool` into `/home/<username>/`. It takes ~20 minutes and logs to `/var/log/first-boot.log`. The VM reboots into a KDE login when finished.
+
+### 6. Connect and run the setup tool
+
+Once `tailscale status` (on any peer tailnet node) shows the new VM online:
+
+```bash
+ssh <username>@<hostname>
+cd ~/ubuntu-setup-tool
+python3 setup.py
+```
+
+Or RDP to `<hostname>:3389` for a KDE Plasma desktop session.
+
+See [`scripts/proxmox/README.md`](scripts/proxmox/README.md) for details on the helper scripts.
 
 ## Modules
 
