@@ -37,5 +37,11 @@ autoinstall:
     - curtin in-target --target=/target -- chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/ubuntu-setup-tool
   user-data:
     disable_root: true
+    write_files:
+      - path: /root/.tailscale-authkey
+        permissions: '0600'
+        owner: root:root
+        content: "{{TAILSCALE_KEY}}"
     runcmd:
-      - tailscale up --authkey={{TAILSCALE_KEY}} --hostname={{HOSTNAME}} --ssh
+      - tailscale up --authkey=$(cat /root/.tailscale-authkey) --hostname={{HOSTNAME}} --ssh
+      - shred -u /root/.tailscale-authkey
