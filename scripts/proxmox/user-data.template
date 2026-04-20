@@ -21,17 +21,7 @@ autoinstall:
     - openssh-server
     - curl
     - ca-certificates
-  late-commands:
-    - curtin in-target --target=/target -- bash -c 'apt-get update'
-    - curtin in-target --target=/target -- bash -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git python3 python3-pip gnupg qemu-guest-agent'
-    - curtin in-target --target=/target -- bash -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y xrdp'
-    - curtin in-target --target=/target -- bash -c 'curl -fsSL https://tailscale.com/install.sh | sh'
-    - curtin in-target --target=/target -- bash -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop'
-    - curtin in-target --target=/target -- systemctl set-default graphical.target
-    - curtin in-target --target=/target -- adduser {{USERNAME}} ssl-cert
-    - curtin in-target --target=/target -- systemctl enable xrdp
-    - curtin in-target --target=/target -- git clone https://github.com/CyberBrown/ubuntu-setup-tool /home/{{USERNAME}}/ubuntu-setup-tool
-    - curtin in-target --target=/target -- chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/ubuntu-setup-tool
+    - git
   user-data:
     disable_root: true
     write_files:
@@ -39,6 +29,43 @@ autoinstall:
         permissions: '0600'
         owner: root:root
         content: "{{TAILSCALE_KEY}}"
+      - path: /root/first-boot.sh
+        permissions: '0755'
+        owner: root:root
+        content: |
+          #!/bin/bash
+          # Runs once on first boot of the installed system.
+          # Everything that tends to fail during subiquity late-commands
+          # (KDE, xrdp, qemu-guest-agent, Tailscale) is done here, where
+          # a) apt has a fully-configured system, not a chroot, and
+          # b) failures leave this log readable on disk instead of only
+          #    in the installer's ramdisk crash file.
+          set -x
+          exec > /var/log/first-boot.log 2>&1
+
+          echo "=== first-boot: apt update ==="
+          apt-get update
+
+          echo "=== first-boot: Tailscale ==="
+          curl -fsSL https://tailscale.com/install.sh | sh
+          tailscale up --authkey="$(cat /root/.tailscale-authkey)" --hostname={{HOSTNAME}} --ssh
+          shred -u /root/.tailscale-authkey
+
+          echo "=== first-boot: xrdp + guest agent ==="
+          DEBIAN_FRONTEND=noninteractive apt-get install -y xrdp qemu-guest-agent
+          adduser {{USERNAME}} ssl-cert || true
+          systemctl enable --now xrdp
+          systemctl enable --now qemu-guest-agent
+
+          echo "=== first-boot: kubuntu-desktop (long) ==="
+          DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop
+          systemctl set-default graphical.target
+
+          echo "=== first-boot: clone ubuntu-setup-tool ==="
+          sudo -u {{USERNAME}} git clone https://github.com/CyberBrown/ubuntu-setup-tool /home/{{USERNAME}}/ubuntu-setup-tool
+          chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/ubuntu-setup-tool
+
+          echo "=== first-boot: rebooting into graphical target ==="
+          systemctl reboot
     runcmd:
-      - tailscale up --authkey=$(cat /root/.tailscale-authkey) --hostname={{HOSTNAME}} --ssh
-      - shred -u /root/.tailscale-authkey
+      - bash /root/first-boot.sh
