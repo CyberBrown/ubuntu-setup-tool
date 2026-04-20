@@ -1,0 +1,40 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: {{HOSTNAME}}
+    username: {{USERNAME}}
+    password: "{{PASSWORD_HASH}}"
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+      - {{SSH_KEY}}
+  storage:
+    layout:
+      name: direct
+  packages:
+    - openssh-server
+    - git
+    - python3
+    - python3-pip
+    - curl
+    - ca-certificates
+    - gnupg
+    - xrdp
+    - qemu-guest-agent
+  late-commands:
+    - curtin in-target --target=/target -- bash -c 'curl -fsSL https://tailscale.com/install.sh | sh'
+    - curtin in-target --target=/target -- tailscale up --authkey={{TAILSCALE_KEY}} --hostname={{HOSTNAME}} --ssh
+    - curtin in-target --target=/target -- bash -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop'
+    - curtin in-target --target=/target -- systemctl set-default graphical.target
+    - curtin in-target --target=/target -- adduser {{USERNAME}} ssl-cert
+    - curtin in-target --target=/target -- systemctl enable xrdp
+    - curtin in-target --target=/target -- sudo -u {{USERNAME}} git clone https://github.com/CyberBrown/ubuntu-setup-tool /home/{{USERNAME}}/ubuntu-setup-tool
+    - curtin in-target --target=/target -- chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/ubuntu-setup-tool
+  user-data:
+    disable_root: true
+    timezone: Europe/Helsinki
