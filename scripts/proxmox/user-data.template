@@ -17,6 +17,19 @@ autoinstall:
   storage:
     layout:
       name: direct
+  network:
+    version: 2
+    ethernets:
+      primary:
+        match:
+          name: "en*"
+        addresses:
+          - {{IP_CIDR}}
+        routes:
+          - to: default
+            via: {{GATEWAY}}
+        nameservers:
+          addresses: [1.1.1.1, 8.8.8.8]
   packages:
     - openssh-server
     - curl
@@ -34,12 +47,6 @@ autoinstall:
         owner: root:root
         content: |
           #!/bin/bash
-          # Runs once on first boot of the installed system.
-          # Everything that tends to fail during subiquity late-commands
-          # (KDE, xrdp, qemu-guest-agent, Tailscale) is done here, where
-          # a) apt has a fully-configured system, not a chroot, and
-          # b) failures leave this log readable on disk instead of only
-          #    in the installer's ramdisk crash file.
           set -x
           exec > /var/log/first-boot.log 2>&1
 
@@ -48,8 +55,11 @@ autoinstall:
 
           echo "=== first-boot: Tailscale ==="
           curl -fsSL https://tailscale.com/install.sh | sh
-          tailscale up --authkey="$(cat /root/.tailscale-authkey)" --hostname={{HOSTNAME}} --ssh
-          shred -u /root/.tailscale-authkey
+          if tailscale up --authkey="$(cat /root/.tailscale-authkey)" --hostname={{HOSTNAME}} --ssh; then
+            shred -u /root/.tailscale-authkey
+          else
+            echo "tailscale up failed; leaving authkey in /root/.tailscale-authkey for retry"
+          fi
 
           echo "=== first-boot: xrdp + guest agent ==="
           DEBIAN_FRONTEND=noninteractive apt-get install -y xrdp qemu-guest-agent
@@ -62,10 +72,15 @@ autoinstall:
           systemctl set-default graphical.target
 
           echo "=== first-boot: clone ubuntu-setup-tool ==="
-          sudo -u {{USERNAME}} git clone https://github.com/CyberBrown/ubuntu-setup-tool /home/{{USERNAME}}/ubuntu-setup-tool
+          if [ ! -d /home/{{USERNAME}}/ubuntu-setup-tool ]; then
+            sudo -u {{USERNAME}} git clone https://github.com/CyberBrown/ubuntu-setup-tool /home/{{USERNAME}}/ubuntu-setup-tool
+          fi
           chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/ubuntu-setup-tool
 
           echo "=== first-boot: rebooting into graphical target ==="
           systemctl reboot
     runcmd:
       - bash /root/first-boot.sh
+  late-commands:
+    - echo 'autoinstall-complete' > /target/etc/autoinstall-complete
+  shutdown: poweroff

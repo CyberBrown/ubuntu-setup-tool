@@ -7,6 +7,8 @@
 #   SSH_KEY="ssh-ed25519 AAAAC3... user@host" \
 #   TAILSCALE_KEY=tskey-auth-... \
 #   PASSWORD_HASH='$6$...' \
+#   IP_CIDR=10.10.10.200/24 \
+#   GATEWAY=10.10.10.1 \
 #   OUTPUT=/var/lib/vz/template/iso/kubuntu-ws-seed.iso \
 #   ./make-seed.sh
 #
@@ -19,6 +21,8 @@ set -euo pipefail
 : "${SSH_KEY:?SSH_KEY is required}"
 : "${TAILSCALE_KEY:?TAILSCALE_KEY is required}"
 : "${PASSWORD_HASH:?PASSWORD_HASH is required}"
+: "${IP_CIDR:?IP_CIDR is required (e.g. 10.10.10.200/24)}"
+: "${GATEWAY:?GATEWAY is required (e.g. 10.10.10.1)}"
 : "${OUTPUT:?OUTPUT is required}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,6 +38,8 @@ render() {
     -e "s|{{SSH_KEY}}|${SSH_KEY}|g" \
     -e "s|{{TAILSCALE_KEY}}|${TAILSCALE_KEY}|g" \
     -e "s|{{PASSWORD_HASH}}|${PASSWORD_HASH}|g" \
+    -e "s|{{IP_CIDR}}|${IP_CIDR}|g" \
+    -e "s|{{GATEWAY}}|${GATEWAY}|g" \
     "$template" > "$out"
 }
 
