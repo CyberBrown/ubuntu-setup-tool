@@ -10,7 +10,7 @@
 #   OUTPUT=/var/lib/vz/template/iso/kubuntu-ws-seed.iso \
 #   ./make-seed.sh
 #
-# Requires genisoimage (preinstalled on Proxmox) or cloud-image-utils.
+# Requires genisoimage (preinstalled on Proxmox).
 
 set -euo pipefail
 
@@ -44,14 +44,10 @@ render "$SCRIPT_DIR/meta-data.template" "$WORKDIR/meta-data"
 # as well; it follows /autoinstall.yaml when datasource is NoCloud.
 cp "$WORKDIR/user-data" "$WORKDIR/autoinstall.yaml"
 
-if command -v cloud-localds >/dev/null 2>&1; then
-  cloud-localds "$OUTPUT" "$WORKDIR/user-data" "$WORKDIR/meta-data"
-else
-  genisoimage -output "$OUTPUT" \
-    -volid cidata \
-    -joliet -rock \
-    "$WORKDIR/user-data" "$WORKDIR/meta-data" "$WORKDIR/autoinstall.yaml" \
-    >/dev/null 2>&1
-fi
+genisoimage -output "$OUTPUT" \
+  -volid cidata \
+  -joliet -rock \
+  "$WORKDIR/user-data" "$WORKDIR/meta-data" "$WORKDIR/autoinstall.yaml" \
+  >/dev/null 2>&1
 
 echo "Wrote $OUTPUT"
