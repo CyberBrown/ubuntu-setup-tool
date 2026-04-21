@@ -1,0 +1,136 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  timezone: America/New_York
+  keyboard:
+    layout: us
+  identity:
+    hostname: {{HOSTNAME}}
+    username: {{USERNAME}}
+    password: "{{PASSWORD_HASH}}"
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+      - {{SSH_KEY}}
+  storage:
+    layout:
+      name: direct
+  network:
+    version: 2
+    ethernets:
+      primary:
+        match:
+          name: "en*"
+        addresses:
+          - {{IP_CIDR}}
+        routes:
+          - to: default
+            via: {{GATEWAY}}
+        nameservers:
+          addresses: [1.1.1.1, 8.8.8.8]
+  packages:
+    - openssh-server
+    - curl
+    - ca-certificates
+    - git
+    - wget
+  user-data:
+    disable_root: true
+    write_files:
+      - path: /root/sunshine-admin-password
+        permissions: '0600'
+        owner: root:root
+        content: "{{SUNSHINE_PASSWORD}}"
+      - path: /root/first-boot.sh
+        permissions: '0755'
+        owner: root:root
+        content: |
+          #!/bin/bash
+          set -x
+          exec > /var/log/first-boot.log 2>&1
+
+          echo "=== first-boot: apt update ==="
+          apt-get update
+
+          echo "=== first-boot: guest agent ==="
+          DEBIAN_FRONTEND=noninteractive apt-get install -y qemu-guest-agent
+          systemctl enable --now qemu-guest-agent
+
+          echo "=== first-boot: nvidia drivers (proprietary, for NVENC) ==="
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-drivers-common
+          ubuntu-drivers install --gpgpu nvidia:570-server || ubuntu-drivers autoinstall
+          # fallback if autoinstall didn't pick the proprietary one
+          DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-570 || true
+
+          echo "=== first-boot: kubuntu-desktop (long) ==="
+          DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop sddm
+          systemctl set-default graphical.target
+
+          echo "=== first-boot: force SDDM to use X11 (Sunshine needs X11) ==="
+          mkdir -p /etc/sddm.conf.d
+          cat > /etc/sddm.conf.d/10-session.conf <<EOF
+          [Autologin]
+          User={{USERNAME}}
+          Session=plasmax11.desktop
+
+          [General]
+          DisplayServer=x11
+          EOF
+
+          echo "=== first-boot: Sunshine from latest .deb ==="
+          cd /tmp
+          wget -q https://github.com/LizardByte/Sunshine/releases/latest/download/sunshine-ubuntu-24.04-amd64.deb
+          DEBIAN_FRONTEND=noninteractive apt-get install -y /tmp/sunshine.deb || \
+            DEBIAN_FRONTEND=noninteractive apt-get install -y ./sunshine-ubuntu-24.04-amd64.deb
+          rm -f /tmp/sunshine.deb /tmp/sunshine-ubuntu-24.04-amd64.deb
+
+          echo "=== first-boot: Sunshine udev + input group ==="
+          cat > /etc/udev/rules.d/85-sunshine.rules <<EOF
+          KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
+          EOF
+          usermod -aG input {{USERNAME}}
+          udevadm control --reload-rules || true
+
+          echo "=== first-boot: Sunshine config (NVENC, AV1, low latency) ==="
+          sudo -u {{USERNAME}} mkdir -p /home/{{USERNAME}}/.config/sunshine
+          cat > /home/{{USERNAME}}/.config/sunshine/sunshine.conf <<EOF
+          capture = x11
+          encoder = nvenc
+          nvenc_preset = p4
+          nvenc_h264_coder = cavlc
+          av1_mode = disabled
+          min_log_level = info
+          fps = [30, 60, 120]
+          resolutions = [1920x1080, 2560x1440]
+          EOF
+          chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/.config/sunshine
+
+          echo "=== first-boot: Sunshine admin creds ==="
+          SUN_PW=$(cat /root/sunshine-admin-password)
+          sudo -u {{USERNAME}} sunshine --creds {{USERNAME}} "$SUN_PW" || true
+          shred -u /root/sunshine-admin-password || rm -f /root/sunshine-admin-password
+
+          echo "=== first-boot: enable linger + user sunshine service ==="
+          loginctl enable-linger {{USERNAME}}
+          sudo -u {{USERNAME}} XDG_RUNTIME_DIR=/run/user/$(id -u {{USERNAME}}) systemctl --user enable sunshine || true
+
+          echo "=== first-boot: install libinput X driver (hot-plug for inputs) ==="
+          DEBIAN_FRONTEND=noninteractive apt-get install -y xserver-xorg-input-libinput
+
+          echo "=== first-boot: clone ubuntu-setup-tool ==="
+          if [ ! -d /home/{{USERNAME}}/ubuntu-setup-tool ]; then
+            sudo -u {{USERNAME}} git clone https://github.com/CyberBrown/ubuntu-setup-tool /home/{{USERNAME}}/ubuntu-setup-tool
+          fi
+          chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/ubuntu-setup-tool
+
+          echo "=== first-boot: done, marker file + poweroff for template snapshot ==="
+          touch /var/lib/first-boot-complete
+          sleep 5
+          systemctl poweroff
+    runcmd:
+      - bash /root/first-boot.sh
+  late-commands:
+    - echo 'autoinstall-complete' > /target/etc/autoinstall-complete
+  shutdown: poweroff

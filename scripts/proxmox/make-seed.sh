@@ -19,13 +19,17 @@ set -euo pipefail
 : "${HOSTNAME:?HOSTNAME is required}"
 : "${USERNAME:?USERNAME is required}"
 : "${SSH_KEY:?SSH_KEY is required}"
-: "${TAILSCALE_KEY:?TAILSCALE_KEY is required}"
 : "${PASSWORD_HASH:?PASSWORD_HASH is required}"
 : "${IP_CIDR:?IP_CIDR is required (e.g. 10.10.10.200/24)}"
 : "${GATEWAY:?GATEWAY is required (e.g. 10.10.10.1)}"
 : "${OUTPUT:?OUTPUT is required}"
 
+# Profile-specific placeholders (optional — empty if not set)
+TAILSCALE_KEY="${TAILSCALE_KEY:-}"
+SUNSHINE_PASSWORD="${SUNSHINE_PASSWORD:-}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATE="${TEMPLATE:-$SCRIPT_DIR/user-data.template}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -37,13 +41,14 @@ render() {
     -e "s|{{USERNAME}}|${USERNAME}|g" \
     -e "s|{{SSH_KEY}}|${SSH_KEY}|g" \
     -e "s|{{TAILSCALE_KEY}}|${TAILSCALE_KEY}|g" \
+    -e "s|{{SUNSHINE_PASSWORD}}|${SUNSHINE_PASSWORD}|g" \
     -e "s|{{PASSWORD_HASH}}|${PASSWORD_HASH}|g" \
     -e "s|{{IP_CIDR}}|${IP_CIDR}|g" \
     -e "s|{{GATEWAY}}|${GATEWAY}|g" \
     "$template" > "$out"
 }
 
-render "$SCRIPT_DIR/user-data.template" "$WORKDIR/user-data"
+render "$TEMPLATE" "$WORKDIR/user-data"
 render "$SCRIPT_DIR/meta-data.template" "$WORKDIR/meta-data"
 
 # Subiquity expects the autoinstall file at the root of the seed ISO
