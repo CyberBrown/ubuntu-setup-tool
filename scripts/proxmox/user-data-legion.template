@@ -58,15 +58,14 @@ autoinstall:
           DEBIAN_FRONTEND=noninteractive apt-get install -y qemu-guest-agent
           systemctl enable --now qemu-guest-agent
 
-          echo "=== first-boot: nvidia drivers (Canonical pre-signed, SB-compatible) ==="
-          # Use the pre-signed linux-modules-nvidia variant instead of the DKMS
-          # build — the DKMS module fails to load under Secure Boot because its
-          # key isn't in the MOK database, so NVENC silently never works.
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            linux-modules-nvidia-570-generic \
-            nvidia-utils-570 \
-            libnvidia-encode-570 \
-            xserver-xorg-video-nvidia-570
+          echo "=== first-boot: nvidia drivers (server-open, SB-compatible) ==="
+          # The open meta-package pulls the Canonical-signed kernel module +
+          # matching userspace (nvidia-utils, libnvidia-encode, Xorg driver)
+          # as one coherent set. The proprietary DKMS variant fails to load
+          # under Secure Boot, and mixing proprietary userspace with the open
+          # kernel module leaves nvidia-smi missing and Sunshine falling back
+          # to software encoding.
+          DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-570-server-open
 
           echo "=== first-boot: kubuntu-desktop (long) ==="
           DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop sddm
@@ -138,7 +137,8 @@ autoinstall:
               Identifier    "Monitor0"
               HorizSync      30.0 - 200.0
               VertRefresh    50.0 - 200.0
-              ModeLine       "1920x1080" 172.80 1920 2040 2248 2576 1080 1081 1084 1118
+              ModeLine       "1920x1080_120" 285.50 1920 1968 2000 2080 1080 1083 1088 1144 +hsync -vsync
+              ModeLine       "1920x1080"     172.80 1920 2040 2248 2576 1080 1081 1084 1118
               Option        "DPMS" "false"
           EndSection
 
@@ -158,10 +158,10 @@ autoinstall:
               Device        "Device0"
               Monitor       "Monitor0"
               DefaultDepth  24
-              Option        "MetaModes" "1920x1080"
+              Option        "MetaModes" "1920x1080_120"
               SubSection    "Display"
                   Depth     24
-                  Modes     "1920x1080"
+                  Modes     "1920x1080_120" "1920x1080"
               EndSubSection
           EndSection
           EOF
@@ -180,14 +180,13 @@ autoinstall:
           usermod -aG input {{USERNAME}}
           udevadm control --reload-rules || true
 
-          echo "=== first-boot: Sunshine config (NVENC, AV1, low latency) ==="
+          echo "=== first-boot: Sunshine config (NVENC, lowest-latency p1) ==="
           sudo -u {{USERNAME}} mkdir -p /home/{{USERNAME}}/.config/sunshine
           cat > /home/{{USERNAME}}/.config/sunshine/sunshine.conf <<EOF
           capture = x11
           encoder = nvenc
-          nvenc_preset = p4
-          nvenc_h264_coder = cavlc
-          av1_mode = disabled
+          nvenc_preset = p1
+          nvenc_latency_over_power = yes
           min_log_level = info
           fps = [30, 60, 120]
           resolutions = [1920x1080, 2560x1440]
