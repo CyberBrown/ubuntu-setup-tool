@@ -125,6 +125,21 @@ autoinstall:
           fi
           chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/ubuntu-setup-tool
 
+          echo "=== first-boot: autostart ubuntu-setup-tool on graphical login ==="
+          sudo -u {{USERNAME}} mkdir -p /home/{{USERNAME}}/.config/autostart
+          cat > /home/{{USERNAME}}/.config/autostart/ubuntu-setup-tool.desktop <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Ubuntu Setup Tool
+          Comment=Post-installation configurator
+          Exec=x-terminal-emulator -e /home/{{USERNAME}}/ubuntu-setup-tool/setup.py
+          Icon=system-run
+          Terminal=false
+          X-GNOME-Autostart-enabled=true
+          Categories=System;
+          EOF
+          chown -R {{USERNAME}}:{{USERNAME}} /home/{{USERNAME}}/.config/autostart
+
           echo "=== first-boot: done, marker file + poweroff for template snapshot ==="
           touch /var/lib/first-boot-complete
           sleep 5

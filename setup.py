@@ -40,6 +40,34 @@ console = Console()
 # ── State management ─────────────────────────────────────────────────────────
 STATE_FILE = Path.home() / ".ubuntu-setup-state.json"
 
+# ── Autostart (XDG) ──────────────────────────────────────────────────────────
+AUTOSTART_FILE = Path.home() / ".config/autostart/ubuntu-setup-tool.desktop"
+
+def _autostart_desktop_contents() -> str:
+    script_path = Path(__file__).resolve()
+    return (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=Ubuntu Setup Tool\n"
+        "Comment=Post-installation configurator\n"
+        f"Exec=x-terminal-emulator -e {script_path}\n"
+        "Icon=system-run\n"
+        "Terminal=false\n"
+        "X-GNOME-Autostart-enabled=true\n"
+        "Categories=System;\n"
+    )
+
+def autostart_enabled() -> bool:
+    return AUTOSTART_FILE.exists()
+
+def set_autostart(enabled: bool) -> None:
+    if enabled:
+        AUTOSTART_FILE.parent.mkdir(parents=True, exist_ok=True)
+        AUTOSTART_FILE.write_text(_autostart_desktop_contents())
+    else:
+        AUTOSTART_FILE.unlink(missing_ok=True)
+
+
 def load_state() -> dict:
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text())
@@ -1034,6 +1062,8 @@ def main_menu():
 
         console.print(table)
         console.print()
+        autostart_label = "[green]on[/green]" if autostart_enabled() else "[dim]off[/dim]"
+        console.print(f"[dim]Launch on startup: {autostart_label} — toggle with 's'[/dim]")
         console.print("[dim]Enter module number, 'all' to run everything, 'reset' to clear state, or 'q' to quit[/dim]")
 
         choice = Prompt.ask("›").strip().lower()
@@ -1049,6 +1079,13 @@ def main_menu():
             if Confirm.ask("Reset all progress?"):
                 STATE_FILE.unlink(missing_ok=True)
                 state = load_state()
+        elif choice == "s":
+            new_state = not autostart_enabled()
+            set_autostart(new_state)
+            console.print(
+                f"[green]Launch on startup {'enabled' if new_state else 'disabled'}.[/green]"
+            )
+            Prompt.ask("\n[dim]Press Enter to continue[/dim]")
         elif choice.isdigit():
             idx = int(choice) - 1
             if 0 <= idx < len(MODULES):
