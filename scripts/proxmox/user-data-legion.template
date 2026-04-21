@@ -72,6 +72,19 @@ autoinstall:
           DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop sddm
           systemctl set-default graphical.target
 
+          echo "=== first-boot: logind power-key → poweroff (bypass PowerDevil prompt) ==="
+          # On autologin+streaming VMs nobody is at the kickoff menu to click
+          # the "Shut down?" dialog PowerDevil pops on ACPI power-button press,
+          # so qm shutdown/reboot times out and can leave the GPU wedged in
+          # D3cold. Make logind handle the button directly.
+          mkdir -p /etc/systemd/logind.conf.d
+          cat > /etc/systemd/logind.conf.d/90-power.conf <<EOF
+          [Login]
+          HandlePowerKey=poweroff
+          HandlePowerKeyLongPress=poweroff
+          HandleRebootKey=reboot
+          EOF
+
           echo "=== first-boot: hand netplan over to NetworkManager ==="
           # kubuntu-desktop installs NetworkManager, but the autoinstall
           # netplan was rendered via systemd-networkd. Without this, Plasma's
