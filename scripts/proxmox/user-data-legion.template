@@ -58,11 +58,15 @@ autoinstall:
           DEBIAN_FRONTEND=noninteractive apt-get install -y qemu-guest-agent
           systemctl enable --now qemu-guest-agent
 
-          echo "=== first-boot: nvidia drivers (proprietary, for NVENC) ==="
-          DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-drivers-common
-          ubuntu-drivers install --gpgpu nvidia:570-server || ubuntu-drivers autoinstall
-          # fallback if autoinstall didn't pick the proprietary one
-          DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-570 || true
+          echo "=== first-boot: nvidia drivers (Canonical pre-signed, SB-compatible) ==="
+          # Use the pre-signed linux-modules-nvidia variant instead of the DKMS
+          # build — the DKMS module fails to load under Secure Boot because its
+          # key isn't in the MOK database, so NVENC silently never works.
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            linux-modules-nvidia-570-generic \
+            nvidia-utils-570 \
+            libnvidia-encode-570 \
+            xserver-xorg-video-nvidia-570
 
           echo "=== first-boot: kubuntu-desktop (long) ==="
           DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop sddm
@@ -73,10 +77,54 @@ autoinstall:
           cat > /etc/sddm.conf.d/10-session.conf <<EOF
           [Autologin]
           User={{USERNAME}}
-          Session=plasmax11.desktop
+          Session=plasma.desktop
 
           [General]
           DisplayServer=x11
+          EOF
+
+          echo "=== first-boot: headless Xorg config for nvidia (no monitor attached) ==="
+          # With GPU passthrough but no physical monitor on the card, the
+          # nvidia driver reports every DFP as disconnected and X starts on a
+          # zero-size screen — Sunshine has nothing to capture. Force a
+          # virtual 1080p display via CustomEDID + AllowEmptyInitialConfig.
+          mkdir -p /etc/X11/xorg.conf.d
+          cat > /etc/X11/xorg.conf.d/10-nvidia-headless.conf <<EOF
+          Section "ServerLayout"
+              Identifier     "Layout0"
+              Screen       0 "Screen0"
+          EndSection
+
+          Section "Monitor"
+              Identifier    "Monitor0"
+              HorizSync      30.0 - 200.0
+              VertRefresh    50.0 - 200.0
+              ModeLine       "1920x1080" 172.80 1920 2040 2248 2576 1080 1081 1084 1118
+              Option        "DPMS" "false"
+          EndSection
+
+          Section "Device"
+              Identifier    "Device0"
+              Driver        "nvidia"
+              VendorName    "NVIDIA Corporation"
+              Option        "ConnectedMonitor" "DFP-0"
+              Option        "AllowEmptyInitialConfiguration" "true"
+              Option        "ModeValidation" "NoMaxPClkCheck,NoEdidMaxPClkCheck,NoMaxSizeCheck,NoHorizSyncCheck,NoVertRefreshCheck,NoDFPNativeResolutionCheck,NoVirtualSizeCheck,NoExtendedGpuCapabilitiesCheck,NoWidthAlignmentCheck,AllowNon60HzDFPModes"
+              Option        "UseEDID" "false"
+              Option        "UseDisplayDevice" "DFP-0"
+          EndSection
+
+          Section "Screen"
+              Identifier    "Screen0"
+              Device        "Device0"
+              Monitor       "Monitor0"
+              DefaultDepth  24
+              Option        "MetaModes" "1920x1080"
+              SubSection    "Display"
+                  Depth     24
+                  Modes     "1920x1080"
+              EndSubSection
+          EndSection
           EOF
 
           echo "=== first-boot: Sunshine from latest .deb ==="
@@ -114,7 +162,12 @@ autoinstall:
 
           echo "=== first-boot: enable linger + user sunshine service ==="
           loginctl enable-linger {{USERNAME}}
-          sudo -u {{USERNAME}} XDG_RUNTIME_DIR=/run/user/$(id -u {{USERNAME}}) systemctl --user enable sunshine || true
+          # `systemctl --user enable` needs a running user bus, which isn't
+          # available from cloud-init context. Drop the wants symlink directly
+          # — equivalent to what `systemctl --user enable sunshine` produces.
+          sudo -u {{USERNAME}} mkdir -p /home/{{USERNAME}}/.config/systemd/user/xdg-desktop-autostart.target.wants
+          sudo -u {{USERNAME}} ln -sf /usr/lib/systemd/user/sunshine.service \
+            /home/{{USERNAME}}/.config/systemd/user/xdg-desktop-autostart.target.wants/sunshine.service
 
           echo "=== first-boot: install libinput X driver (hot-plug for inputs) ==="
           DEBIAN_FRONTEND=noninteractive apt-get install -y xserver-xorg-input-libinput
