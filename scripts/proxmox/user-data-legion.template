@@ -72,6 +72,32 @@ autoinstall:
           DEBIAN_FRONTEND=noninteractive apt-get install -y kubuntu-desktop sddm
           systemctl set-default graphical.target
 
+          echo "=== first-boot: hand netplan over to NetworkManager ==="
+          # kubuntu-desktop installs NetworkManager, but the autoinstall
+          # netplan was rendered via systemd-networkd. Without this, Plasma's
+          # NM widget shows "No network connections" even though the link is
+          # up. Switch the renderer so NM adopts the interface.
+          cat > /etc/netplan/50-cloud-init.yaml <<EOF
+          network:
+            version: 2
+            renderer: NetworkManager
+            ethernets:
+              primary:
+                match:
+                  name: "en*"
+                addresses:
+                - "{{IP_CIDR}}"
+                nameservers:
+                  addresses:
+                  - 1.1.1.1
+                  - 8.8.8.8
+                routes:
+                - to: "default"
+                  via: "{{GATEWAY}}"
+          EOF
+          chmod 600 /etc/netplan/50-cloud-init.yaml
+          netplan apply || true
+
           echo "=== first-boot: force SDDM to use X11 (Sunshine needs X11) ==="
           mkdir -p /etc/sddm.conf.d
           cat > /etc/sddm.conf.d/10-session.conf <<EOF
