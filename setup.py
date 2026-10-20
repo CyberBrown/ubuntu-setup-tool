@@ -136,8 +136,11 @@ def detect_gpu() -> str:
 
 
 # ── Download URL Registry & DE-powered resolver ─────────────────────────────
-# Apps with unstable download URLs get resolved at runtime via DE LLM call.
-# Fallback URLs are used if DE is unreachable.
+# Apps with unstable download URLs can be resolved at runtime via an LLM
+# intake endpoint, but only when UBUNTU_SETUP_URL_RESOLVER is set. The old
+# default (intake.distributedelectrons.com) died with the 2026-06-23
+# Cloudflare exit, so by default the hardcoded fallback URLs are used directly.
+URL_RESOLVER_ENDPOINT = os.environ.get("UBUNTU_SETUP_URL_RESOLVER", "").strip()
 
 DOWNLOAD_REGISTRY = {
     "cursor": {
@@ -198,7 +201,7 @@ def resolve_download_url(app_id: str) -> str:
     
     Strategy:
     1. Check URL cache (valid for 24h)
-    2. Try DE intake worker with LLM call to find current URL
+    2. If UBUNTU_SETUP_URL_RESOLVER is set, ask that intake endpoint (LLM)
     3. Fall back to hardcoded URL
     """
     registry_entry = DOWNLOAD_REGISTRY.get(app_id)
@@ -213,7 +216,10 @@ def resolve_download_url(app_id: str) -> str:
     if cached and (time.time() - cached.get("ts", 0)) < 86400:
         return cached["url"]
 
-    # Try DE LLM resolution
+    if not URL_RESOLVER_ENDPOINT:
+        return registry_entry["fallback"]
+
+    # Try LLM resolution via the configured intake endpoint
     try:
         resolved = _de_resolve_url(app_id, registry_entry["description"])
         if resolved:
@@ -221,7 +227,7 @@ def resolve_download_url(app_id: str) -> str:
             _save_url_cache(cache)
             return resolved
     except Exception as e:
-        console.print(f"[dim]  DE URL resolution failed for {app_id}: {e}. Using fallback.[/dim]")
+        console.print(f"[dim]  URL resolution failed for {app_id}: {e}. Using fallback.[/dim]")
 
     return registry_entry["fallback"]
 
@@ -247,7 +253,7 @@ def _de_resolve_url(app_id: str, description: str) -> Optional[str]:
     })
 
     req = urllib.request.Request(
-        "https://intake.distributedelectrons.com/intake",
+        URL_RESOLVER_ENDPOINT,
         data=payload.encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",

@@ -160,10 +160,10 @@ Keyboard remapping is deferred to a future release. The goal is unified Ctrl+C/V
 Apps with unstable download URLs (Cursor, Discord, Proton, VS Code, etc.) use a dynamic resolver:
 
 1. Checks a local cache (`~/.ubuntu-setup-url-cache.json`, 24h TTL)
-2. Sends a task to Distributed Electrons (`intake.distributedelectrons.com`) to find the current URL via LLM
-3. Falls back to a hardcoded URL if DE is unreachable
+2. If `UBUNTU_SETUP_URL_RESOLVER` is set, POSTs a task to that intake endpoint to find the current URL via LLM
+3. Otherwise (or if the endpoint fails) uses the hardcoded URL
 
-This means the setup tool stays functional even as vendors change their download paths. The `DOWNLOAD_REGISTRY` in `setup.py` lists all dynamically-resolved apps.
+The resolver used to default to Distributed Electrons (`intake.distributedelectrons.com`); that host died in the 2026-06-23 Cloudflare exit, so it is now opt-in and runs no network call by default. The `DOWNLOAD_REGISTRY` in `setup.py` lists all dynamically-resolved apps.
 
 ## Project Structure
 
